@@ -1,66 +1,77 @@
 import os
-import time
 from pathlib import Path
+
 from dotenv import load_dotenv
 from tqdm.auto import tqdm
-from pinecone import Pinecone, ServerlessSpec
+
+# Pinecone (latest SDK)
+from pinecone import Pinecone
+
+# LangChain loaders & splitters
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+# ✅ HuggingFace embeddings (FREE, no API key)
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 load_dotenv()
 
-GOOGLE_API_KEY=os.getenv("GOOGLE_API_KEY")
-PINECONE_API_KEY=os.getenv("PINECONE_API_KEY")
-PINECONE_ENV="us-east-1"
-PINECONE_INDEX_NAME="medicalindex"
+# ----------------------------------------
+# ENV variables
+# ----------------------------------------
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 
-os.environ["GOOGLE_API_KEY"]=GOOGLE_API_KEY
+# ✅ YOUR EXISTING INDEX NAME
+PINECONE_INDEX_NAME = "aidoctor"
 
-UPLOAD_DIR="./uploaded_docs"
-os.makedirs(UPLOAD_DIR,exist_ok=True)
+UPLOAD_DIR = "./uploaded_docs"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# ----------------------------------------
+# Connect to EXISTING Pinecone index
+# ----------------------------------------
+pc = Pinecone(api_key=PINECONE_API_KEY)
+index = pc.Index(PINECONE_INDEX_NAME)
 
-# initialize pinecone instance
-pc=Pinecone(api_key=PINECONE_API_KEY)
-spec=ServerlessSpec(cloud="aws",region=PINECONE_ENV)
-existing_indexes=[i["name"] for i in pc.list_indexes()]
-
-
-if PINECONE_INDEX_NAME not in existing_indexes:
-    pc.create_index(
-        name=PINECONE_INDEX_NAME,
-        dimension=768,
-        metric="dotproduct",
-        spec=spec
-    )
-    while not pc.describe_index(PINECONE_INDEX_NAME).status["ready"]:
-        time.sleep(1)
-
-
-index=pc.Index(PINECONE_INDEX_NAME)
-
-# load,split,embed and upsert pdf docs content
-
+# ----------------------------------------
+# Load, split, embed, and upsert PDFs
+# ----------------------------------------
 def load_vectorstore(uploaded_files):
-    embed_model = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    # ✅ HuggingFace embedding model (384-dim)
+    embed_model = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
+
     file_paths = []
 
+    # Save uploaded PDFs
     for file in uploaded_files:
         save_path = Path(UPLOAD_DIR) / file.filename
         with open(save_path, "wb") as f:
             f.write(file.file.read())
         file_paths.append(str(save_path))
 
+    # Process each PDF
     for file_path in file_paths:
         loader = PyPDFLoader(file_path)
         documents = loader.load()
 
-        splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500,
+            chunk_overlap=50
+        )
         chunks = splitter.split_documents(documents)
 
+        # ✅ Extract text + store text explicitly in metadata
         texts = [chunk.page_content for chunk in chunks]
-        metadatas = [chunk.metadata for chunk in chunks]
+        metadatas = [
+            {
+                "text": chunk.page_content,  # IMPORTANT for RAG
+                **chunk.metadata
+            }
+            for chunk in chunks
+        ]
+
         ids = [f"{Path(file_path).stem}-{i}" for i in range(len(chunks))]
 
         print(f"🔍 Embedding {len(texts)} chunks...")
