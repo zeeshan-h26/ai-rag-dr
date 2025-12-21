@@ -7,7 +7,7 @@ from pinecone import Pinecone
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 
-from server.logger import logger
+from logger import logger
 
 router = APIRouter(prefix="/upload", tags=["Upload"])
 

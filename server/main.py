@@ -7,9 +7,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 
-from server.middlewares.exception_handlers import catch_exception_middleware
-from server.routes.upload_pdfs import router as upload_router
-from server.routes.ask_question import router as ask_router
+from middlewares.exception_handlers import catch_exception_middleware
+from routes.upload_pdfs import router as upload_router
+from routes.ask_question import router as ask_router
 
 
 app = FastAPI(

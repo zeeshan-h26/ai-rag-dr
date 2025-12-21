@@ -9,9 +9,9 @@ from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from langchain_community.embeddings import HuggingFaceEmbeddings
 
-from server.logger import logger
-from server.modules.llm import get_llm_chain
-from server.modules.query_handlers import query_chain
+from logger import logger
+from modules.llm import get_llm_chain
+from modules.query_handlers import query_chain
 
 router = APIRouter()
 
