@@ -23,22 +23,29 @@ class AskRequest(BaseModel):
 
 
 # -------------------------
-# Pinecone v8 client
+# GLOBAL INITIALIZATION (LOAD ONCE)
 # -------------------------
+
+# 🔹 Load embeddings ONCE (Render-safe, lightweight model)
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/paraphrase-MiniLM-L3-v2"
+)
+
+# 🔹 Pinecone client & index (load once)
 pc = pinecone.Pinecone(api_key=os.environ["PINECONE_API_KEY"])
 index = pc.Index(os.environ["PINECONE_INDEX_NAME"])
 
 
+# -------------------------
+# Ask endpoint
+# -------------------------
 @router.post("/ask")
 async def ask_question(data: AskRequest):
     try:
         question = data.query
         logger.info(f"User query: {question}")
 
-        embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
-
+        # 🔹 Use GLOBAL embeddings (do NOT recreate)
         query_vector = embeddings.embed_query(question)
 
         response = index.query(
@@ -61,6 +68,9 @@ async def ask_question(data: AskRequest):
                 "sources": []
             }
 
+        # -------------------------
+        # Simple in-memory retriever
+        # -------------------------
         class SimpleRetriever(BaseRetriever):
             tags: Optional[List[str]] = Field(default_factory=list)
             metadata: Optional[dict] = Field(default_factory=dict)
