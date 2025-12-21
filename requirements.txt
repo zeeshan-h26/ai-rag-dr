@@ -8,8 +8,8 @@ langchain-groq
 langchain-text-splitters
 
 sentence-transformers
-transformers
-torch
+
+
 huggingface-hub
 
 pinecone-client==3.0.3
