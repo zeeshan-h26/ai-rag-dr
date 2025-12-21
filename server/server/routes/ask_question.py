@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 from typing import List, Optional
 import os
@@ -7,7 +7,7 @@ import pinecone
 from pydantic import BaseModel, Field
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 
 from logger import logger
 from modules.llm import get_llm_chain
@@ -26,12 +26,12 @@ class AskRequest(BaseModel):
 # GLOBAL INITIALIZATION (LOAD ONCE)
 # -------------------------
 
-# 🔹 Load embeddings ONCE (Render-safe, lightweight model)
+# 🔹 Load embeddings ONCE (Render-safe)
 embeddings = HuggingFaceEmbeddings(
     model_name="sentence-transformers/paraphrase-MiniLM-L3-v2"
 )
 
-# 🔹 Pinecone client & index (load once)
+# 🔹 Pinecone client & index
 pc = pinecone.Pinecone(api_key=os.environ["PINECONE_API_KEY"])
 index = pc.Index(os.environ["PINECONE_INDEX_NAME"])
 
@@ -40,14 +40,22 @@ index = pc.Index(os.environ["PINECONE_INDEX_NAME"])
 # Ask endpoint
 # -------------------------
 @router.post("/ask")
-async def ask_question(data: AskRequest):
+async def ask_question(data: AskRequest = Body(...)):
+    """
+    Ask a medical question using RAG.
+    Accepts JSON only:
+    {
+      "query": "your question"
+    }
+    """
     try:
         question = data.query
         logger.info(f"User query: {question}")
 
-        # 🔹 Use GLOBAL embeddings (do NOT recreate)
+        # 🔹 Embed query
         query_vector = embeddings.embed_query(question)
 
+        # 🔹 Query Pinecone
         response = index.query(
             vector=query_vector,
             top_k=3,
@@ -64,7 +72,7 @@ async def ask_question(data: AskRequest):
 
         if not docs:
             return {
-                "answer": "No relevant information found in uploaded documents.",
+                "response": "No relevant information found in uploaded documents.",
                 "sources": []
             }
 
