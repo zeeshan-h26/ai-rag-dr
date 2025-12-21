@@ -1,11 +1,11 @@
-<<<<<<< HEAD
+
 def main():
     print("Hello from medicalassistant!")
 
 
 if __name__ == "__main__":
     main()
-=======
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from middlewares.exception_handlers import catch_exception_middleware
@@ -38,4 +38,4 @@ app.include_router(upload_router)
 app.include_router(ask_router)
 
 
->>>>>>> 6bcb2cac (Initial commit)
+
