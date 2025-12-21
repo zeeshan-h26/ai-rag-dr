@@ -1,10 +1,20 @@
+<<<<<<< HEAD
 fastapi
 uvicorn
 
+=======
+# Web Framework
+fastapi
+uvicorn[standard]
+python-multipart  # for file uploads
+
+# LangChain & Ecosystem
+>>>>>>> 6bcb2cac (Initial commit)
 langchain
 langchain-community
 langchain-core
 langchain-groq
+<<<<<<< HEAD
 langchain-text-splitters
 
 sentence-transformers
@@ -19,3 +29,32 @@ pydantic
 python-dotenv
 requests
 tqdm
+=======
+
+# Vectorstore
+# chromadb
+pinecone
+
+# Embeddings
+# sentence-transformers
+# langchain-google-generative-ai
+langchain-google-genai
+
+# PDF Parsing
+PyPDF  # backend for PyPDFLoader via langchain_community
+
+# Environment Variables
+python-dotenv
+
+# Typing & Utilities
+pydantic
+requests
+tqdm
+
+# Logging (optional but recommended)
+loguru
+
+
+
+#  uv pip install -r requirements.txt
+>>>>>>> 6bcb2cac (Initial commit)
