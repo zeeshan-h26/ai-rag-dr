@@ -4,42 +4,51 @@ from pathlib import Path
 from dotenv import load_dotenv
 from tqdm.auto import tqdm
 
-# Pinecone (latest SDK)
+# Pinecone v3
 from pinecone import Pinecone
 
 # LangChain loaders & splitters
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# ✅ HuggingFace embeddings (FREE, no API key)
-from langchain_community.embeddings import HuggingFaceEmbeddings
+# HuggingFace Endpoint Embeddings (Correct + Stable)
+from langchain_huggingface import HuggingFaceEndpointEmbeddings
 
+
+# ----------------------------------------
+# Load ENV
+# ----------------------------------------
 load_dotenv()
 
-# ----------------------------------------
-# ENV variables
-# ----------------------------------------
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
 
-# ✅ YOUR EXISTING INDEX NAME
-PINECONE_INDEX_NAME = "aidoctor"
+if not PINECONE_API_KEY:
+    raise RuntimeError("PINECONE_API_KEY missing")
+if not PINECONE_INDEX_NAME:
+    raise RuntimeError("PINECONE_INDEX_NAME missing")
 
 UPLOAD_DIR = "./uploaded_docs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+
 # ----------------------------------------
-# Connect to EXISTING Pinecone index
+# Connect Pinecone
 # ----------------------------------------
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index = pc.Index(PINECONE_INDEX_NAME)
 
+
 # ----------------------------------------
-# Load, split, embed, and upsert PDFs
+# Load, split, embed, upload
 # ----------------------------------------
 def load_vectorstore(uploaded_files):
-    # ✅ HuggingFace embedding model (384-dim)
-    embed_model = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
+
+    # BGE-M3 via HF Endpoint API (1024-dim)
+    embedder = HuggingFaceEndpointEmbeddings(
+        model="BAAI/bge-m3"
+        # IMPORTANT: Do NOT pass token here.
+        # It auto reads from HUGGINGFACEHUB_API_TOKEN environment variable
     )
 
     file_paths = []
@@ -57,16 +66,17 @@ def load_vectorstore(uploaded_files):
         documents = loader.load()
 
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=50
+            chunk_size=700,
+            chunk_overlap=120
         )
         chunks = splitter.split_documents(documents)
 
-        # ✅ Extract text + store text explicitly in metadata
-        texts = [chunk.page_content for chunk in chunks]
+        # BGE requires "passage:" prefix
+        texts = [f"passage: {chunk.page_content}" for chunk in chunks]
+
         metadatas = [
             {
-                "text": chunk.page_content,  # IMPORTANT for RAG
+                "text": chunk.page_content,  # required for RAG response
                 **chunk.metadata
             }
             for chunk in chunks
@@ -75,11 +85,10 @@ def load_vectorstore(uploaded_files):
         ids = [f"{Path(file_path).stem}-{i}" for i in range(len(chunks))]
 
         print(f"🔍 Embedding {len(texts)} chunks...")
-        embeddings = embed_model.embed_documents(texts)
+        embeddings = embedder.embed_documents(texts)
 
         print("📤 Uploading to Pinecone...")
-        with tqdm(total=len(embeddings), desc="Upserting to Pinecone") as progress:
+        with tqdm(total=len(embeddings), desc="Upserting to Pinecone"):
             index.upsert(vectors=zip(ids, embeddings, metadatas))
-            progress.update(len(embeddings))
 
-        print(f"✅ Upload complete for {file_path}")
+        print(f"✅ Upload complete → {file_path}")

@@ -5,71 +5,95 @@ import os
 
 from pydantic import Field
 from pinecone import Pinecone
+from dotenv import load_dotenv
 
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 
-# ✅ HuggingFace embeddings (FREE)
-from langchain_community.embeddings import HuggingFaceEmbeddings
+# HF Endpoint Embeddings (correct new class)
+from langchain_huggingface import HuggingFaceEndpointEmbeddings
 
-from modules.llm import get_llm_chain
-from modules.query_handlers import query_chain
-from logger import logger
+# Correct project imports
+from server.modules.llm import get_llm_chain
+from server.modules.query_handlers import query_chain
+from server.logger import logger
+
 
 router = APIRouter()
 
+# -------------------------
+# Load Environment
+# -------------------------
+load_dotenv()
 
+HF_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
+
+if not HF_TOKEN:
+    raise RuntimeError("HUGGINGFACEHUB_API_TOKEN missing")
+if not PINECONE_API_KEY:
+    raise RuntimeError("PINECONE_API_KEY missing")
+if not PINECONE_INDEX_NAME:
+    raise RuntimeError("PINECONE_INDEX_NAME missing")
+
+
+# -------------------------
+# Global Initialization
+# -------------------------
+
+# HuggingFace BGE-M3 Embeddings (correct + stable)
+embeddings = HuggingFaceEndpointEmbeddings(
+    model="BAAI/bge-m3",
+    
+)
+
+# Pinecone v3 client + index
+pc = Pinecone(api_key=PINECONE_API_KEY)
+index = pc.Index(PINECONE_INDEX_NAME)
+
+
+# -------------------------
+# Ask Endpoint
+# -------------------------
 @router.post("/ask/")
 async def ask_question(question: str = Form(...)):
     try:
         logger.info(f"User query: {question}")
 
-        # --------------------------------
-        # Pinecone connection
-        # --------------------------------
-        pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
-        index = pc.Index(os.environ["PINECONE_INDEX_NAME"])
+        # -------------------------
+        # Embed Query  (BGE requires "query:" prefix)
+        # -------------------------
+        embedded_query = embeddings.embed_query(f"query: {question}")
 
-        # --------------------------------
-        # HuggingFace Embedding model
-        # MUST match the one used during upsert
-        # --------------------------------
-        embed_model = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
-
-        embedded_query = embed_model.embed_query(question)
-
-        # --------------------------------
+        # -------------------------
         # Query Pinecone
-        # --------------------------------
-        res = index.query(
+        # -------------------------
+        response = index.query(
             vector=embedded_query,
             top_k=3,
             include_metadata=True
         )
 
-        # --------------------------------
-        # Convert Pinecone matches → LangChain Documents
-        # Uses "text" stored in metadata
-        # --------------------------------
+        matches = response.get("matches", [])
+
         docs = [
             Document(
-                page_content=match["metadata"].get("text", ""),
-                metadata=match["metadata"]
+                page_content=m["metadata"].get("text", ""),
+                metadata=m["metadata"]
             )
-            for match in res.get("matches", [])
+            for m in matches
         ]
 
         if not docs:
             return {
-                "answer": "I'm sorry, I couldn't find relevant information in the uploaded documents.",
+                "answer": "Sorry, no relevant information found in uploaded documents.",
                 "sources": []
             }
 
-        # --------------------------------
-        # Simple Retriever (LangChain 1.x)
-        # --------------------------------
+        # -------------------------
+        # Simple Retriever
+        # -------------------------
         class SimpleRetriever(BaseRetriever):
             tags: Optional[List[str]] = Field(default_factory=list)
             metadata: Optional[dict] = Field(default_factory=dict)
@@ -86,9 +110,6 @@ async def ask_question(question: str = Form(...)):
 
         retriever = SimpleRetriever(docs)
 
-        # --------------------------------
-        # LLM Chain + Query
-        # --------------------------------
         chain = get_llm_chain(retriever)
         result = query_chain(chain, question)
 

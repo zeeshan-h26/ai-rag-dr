@@ -1,5 +1,5 @@
 
-from logger import logger
+from server.logger import logger
 from langchain_core.messages import AIMessage
 
 def query_chain(chain, user_input: str):
