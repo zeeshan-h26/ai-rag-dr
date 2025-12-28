@@ -1,2 +1,5 @@
 streamlit
 requests
+pypdf
+python-dotenv
+pillow
